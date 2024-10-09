@@ -756,13 +756,13 @@ ncclResult_t  mscclRunAlgo(
     const void* sendBuff, const size_t sendCounts[], const size_t sDisPls[],
     void* recvBuff, const size_t recvCounts[], const size_t rDisPls[],
     size_t count, ncclDataType_t dataType, int root, int peer, ncclRedOp_t op,
-    mscclAlgoHandle_t mscclAlgoHandle, ncclComm_t comm, hipStream_t stream);
+    mscclAlgoHandle_t mscclAlgoHandle, ncclComm_t comm, hipStream_t stream, size_t arc);
 /*! @cond       include_hidden */
 ncclResult_t pmscclRunAlgo(
     const void* sendBuff, const size_t sendCounts[], const size_t sDisPls[],
     void* recvBuff, const size_t recvCounts[], const size_t rDisPls[],
     size_t count, ncclDataType_t dataType, int root, int peer, ncclRedOp_t op,
-    mscclAlgoHandle_t mscclAlgoHandle, ncclComm_t comm, hipStream_t stream);
+    mscclAlgoHandle_t mscclAlgoHandle, ncclComm_t comm, hipStream_t stream, size_t arc);
 /*! @endcond */
 
 /*! @brief      MSCCL Unload Algorithm

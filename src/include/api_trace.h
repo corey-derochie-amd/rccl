@@ -145,7 +145,7 @@ typedef ncclResult_t (*mscclRunAlgo_fn_t)(
     const void* sendBuff, const size_t sendCounts[], const size_t sDisPls[],
     void* recvBuff, const size_t recvCounts[], const size_t rDisPls[], size_t count,
     ncclDataType_t dataType, int root, int peer, ncclRedOp_t op,
-    mscclAlgoHandle_t mscclAlgoHandle, ncclComm_t comm, hipStream_t stream);
+    mscclAlgoHandle_t mscclAlgoHandle, ncclComm_t comm, hipStream_t stream, size_t allReduceCount);
 
 typedef ncclResult_t (*mscclUnloadAlgo_fn_t)(mscclAlgoHandle_t mscclAlgoHandle);
 

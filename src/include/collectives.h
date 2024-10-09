@@ -64,4 +64,11 @@ struct ncclConnFifo {
   ssize_t size;
   void* ptr;
 };
+
+extern thread_local size_t AllReduceCount;
+extern const char* AllReduceDumpDir;
+void writeAllReduceBuff(const char* filename, const void* buff, size_t nBytes, int rank, size_t allReduceCount);
+void writeAllReduceBuffCallback(hipStream_t stream, const char* filename, const void* buff, size_t nBytes, int rank, size_t allReduceCount);
+ncclResult_t writeAllReduceBuffAsyncLaunch(ncclComm_t comm, hipStream_t stream, const char* filename, const void* buff, size_t nBytes, int rank, size_t allReduceCount);
+
 #endif

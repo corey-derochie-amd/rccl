@@ -12,6 +12,8 @@
 #include "api_trace.h"
 
 #include "msccl/msccl_lifecycle.h"
+#include <sys/stat.h>
+#include <sys/types.h>
 
 NCCL_API(ncclResult_t, ncclAllGather, const void* sendbuff, void* recvbuff, size_t sendcount,
     ncclDataType_t datatype, ncclComm_t comm, cudaStream_t stream);
@@ -63,11 +65,36 @@ ncclResult_t ncclAllReduce_impl(const void* sendbuff, void* recvbuff, size_t cou
       count, datatype, 0, 0, op, mscclFuncAllReduce, comm, stream);
   }
 
+  size_t allReduceCount = AllReduceCount++;
+  if (AllReduceDumpDir) {
+    //writeAllReduceBuff("send.bin", sendbuff, ncclTypeSize(datatype) * count, comm->rank, allReduceCount);
+  }
+
   struct ncclInfo info = { ncclFuncAllReduce, "AllReduce",
     sendbuff, recvbuff, count, datatype, op, 0, comm, stream, /* Args */
     ALLREDUCE_CHUNKSTEPS, ALLREDUCE_SLICESTEPS };
+  info.allReduceCount = allReduceCount;
   NCCLCHECK(ncclEnqueueCheck(&info));
   return ncclSuccess;
+}
+void writeAllReduceBuff(const char* filename, const void* buff, size_t nBytes, int rank, size_t allReduceCount) {
+  nBytes = min(nBytes, 1024*1024);
+  auto path = std::string(AllReduceDumpDir) + "/" + std::to_string(allReduceCount);
+  if (access(path.c_str(), F_OK) == -1) {
+    mkdir(path.c_str(), 0777);
+  }
+  path = path + "/" + std::to_string(rank);
+  if (access(path.c_str(), F_OK) == -1) {
+    mkdir(path.c_str(), 0777);
+  }
+  path = path + "/" + filename;
+  //auto cmd = std::string("sha1sum -b | grep -oP '^[0-9a-f]*' | tee ") + path + ".txt";
+  //FILE* f = popen(cmd.c_str(), "w");
+  FILE* f = fopen(path.c_str(), "w");
+  size_t wrote = fwrite(buff, sizeof(char), nBytes, f);
+  //pclose(f);
+  fclose(f);
+  INFO(NCCL_COLL, "wrote %s (%zi/%zi) [%p]", path.c_str(), wrote, nBytes, buff);
 }
 
 NCCL_API(ncclResult_t, ncclAllToAll, const void* sendbuff, void* recvbuff, size_t count, ncclDataType_t datatype,

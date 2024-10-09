@@ -403,14 +403,14 @@ static ncclResult_t mscclSaveCountsAndDispls(struct mscclSavedSchedulerParam* pa
 static ncclResult_t mscclRunSavedParams() {
   mscclThreadLocalStatus& threadLocalStatus = mscclGetThreadLocalStatus();
   for (auto& param : threadLocalStatus.savedSchedulerParams) {
-    INFO(NCCL_COLL,"%s: opCount %lx sendbuff %p recvbuff %p count %zi datatype %d op %d root %d comm %p [nranks=%d] stream %p task %d globalrank %d",
-    mscclFuncNames[param.p.func], param.p.opCount, param.p.sendBuff, param.p.recvBuff, param.p.count,
+    INFO(NCCL_COLL,"%s: ARC %zi opCount %lx sendbuff %p recvbuff %p count %zi datatype %d op %d root %d comm %p [nranks=%d] stream %p task %d globalrank %d",
+    mscclFuncNames[param.p.func], param.p.allReduceCount, param.p.opCount, param.p.sendBuff, param.p.recvBuff, param.p.count,
     param.p.dataType, param.p.op, param.p.root, param.comm, param.p.nRanks, param.stream, param.comm->tasks.nTasksP2p + param.comm->tasks.nTasksColl, param.comm->localRankToRank[param.comm->localRank]);
 
     NCCLCHECK(mscclRunAlgo(
       param.p.sendBuff, param.p.sendCounts, param.p.sDisPls,
       param.p.recvBuff, param.p.recvCounts, param.p.rDisPls,
-      param.p.count, param.p.dataType, param.p.root, param.p.peer, param.p.op, param.p.handle, param.comm, param.stream));
+      param.p.count, param.p.dataType, param.p.root, param.p.peer, param.p.op, param.p.handle, param.comm, param.stream, param.p.allReduceCount));
   }
   threadLocalStatus.savedSchedulerParams.clear();
   return ncclSuccess;
@@ -496,6 +496,9 @@ static inline bool isMscclppAllReduceSupported(ncclDataType_t dataType, ncclRedO
 }
 #endif
 
+thread_local size_t AllReduceCount = 0;
+const char* AllReduceDumpDir = nullptr;
+
 ncclResult_t mscclEnqueueCheck(
     const void* sendBuff, const size_t sendCounts[], const size_t sDisPls[],
     void* recvBuff, const size_t recvCounts[], const size_t rDisPls[],
@@ -528,9 +531,16 @@ ncclResult_t mscclEnqueueCheck(
 
           if (isManagedBuffer) { /* MSCCL++ not enabled for managed memory buffers */ }
           else if (func == mscclFuncAllReduce && nBytes <= comm->mscclpp_threshold && isMscclppAllReduceSupported(dataType, op)) {
-            INFO(NCCL_COLL,"%s: opCount %lx sendbuff %p recvbuff %p count %zi datatype %d op %d root %d comm %p [nranks=%d] stream %p",
-              "mscclpp_ncclAllReduce", comm->opCount, sendBuff, recvBuff, count, dataType, op, root, comm, comm->nRanks, stream);
+            size_t allReduceCount = AllReduceCount++;
+            if (AllReduceDumpDir) {
+              //writeAllReduceBuff("send.bin", sendBuff, nBytes, comm->rank, allReduceCount);
+            }
+            INFO(NCCL_COLL,"%s: ARC %zi opCount %lx sendbuff %p recvbuff %p count %zi datatype %d op %d root %d comm %p [nranks=%d] stream %p",
+              "mscclpp_ncclAllReduce", allReduceCount, comm->opCount, sendBuff, recvBuff, count, dataType, op, root, comm, comm->nRanks, stream);
             NCCLCHECK(mscclpp_ncclAllReduce(sendBuff, recvBuff, count, dataType, op, comm->mscclpp_comm, stream));
+            if (AllReduceDumpDir) {
+              writeAllReduceBuffAsyncLaunch(comm, stream, "recv.bin", recvBuff, nBytes, comm->rank, allReduceCount);
+            }
             threadLocalStatus.savedSchedulerParams.clear();
             break;
           }
@@ -547,6 +557,11 @@ ncclResult_t mscclEnqueueCheck(
       if (comm->mscclCompatible) {
           NCCLCHECK(mscclSchedulerSelectAlgo(&threadLocalStatus.savedSchedulerParams.back()));
           if (threadLocalStatus.savedSchedulerParams.back().p.scheduled) {
+            size_t allReduceCount = AllReduceCount++;
+            if (AllReduceDumpDir) {
+              //writeAllReduceBuff("send.bin", sendBuff, nBytes, comm->rank, allReduceCount);
+            }
+            threadLocalStatus.savedSchedulerParams.back().p.allReduceCount = allReduceCount;
             NCCLCHECK(mscclRunSavedParams());
             break;
           }
@@ -569,9 +584,16 @@ ncclResult_t mscclEnqueueCheck(
 
           if (isManagedBuffer) { /* MSCCL++ not enabled for managed memory buffers */ }
           else if (func == mscclFuncAllReduce && nBytes <= comm->mscclpp_threshold && isMscclppAllReduceSupported(dataType, op)) {
-            INFO(NCCL_COLL,"%s: opCount %lx sendbuff %p recvbuff %p count %zi datatype %d op %d root %d comm %p [nranks=%d] stream %p",
-              "mscclpp_ncclAllReduce", comm->opCount, sendBuff, recvBuff, count, dataType, op, root, comm, comm->nRanks, stream);
+            size_t allReduceCount = AllReduceCount++;
+            if (AllReduceDumpDir) {
+              //writeAllReduceBuff("send.bin", sendBuff, nBytes, comm->rank, allReduceCount);
+            }
+            INFO(NCCL_COLL,"%s: ARC %zi opCount %lx sendbuff %p recvbuff %p count %zi datatype %d op %d root %d comm %p [nranks=%d] stream %p",
+              "mscclpp_ncclAllReduce", allReduceCount, comm->opCount, sendBuff, recvBuff, count, dataType, op, root, comm, comm->nRanks, stream);
             NCCLCHECK(mscclpp_ncclAllReduce(sendBuff, recvBuff, count, dataType, op, comm->mscclpp_comm, stream));
+            if (AllReduceDumpDir) {
+              writeAllReduceBuffAsyncLaunch(comm, stream, "recv.bin", recvBuff, nBytes, comm->rank, allReduceCount);
+            }
             threadLocalStatus.savedSchedulerParams.clear();
             break;
           }
@@ -588,6 +610,11 @@ ncclResult_t mscclEnqueueCheck(
       if (comm->mscclCompatible) {
           NCCLCHECK(mscclSchedulerSelectAlgo(&threadLocalStatus.savedSchedulerParams.back()));
           if (threadLocalStatus.savedSchedulerParams.back().p.scheduled) {
+            size_t allReduceCount = AllReduceCount++;
+            if (AllReduceDumpDir) {
+              //writeAllReduceBuff("send.bin", sendBuff, nBytes, comm->rank, allReduceCount);
+            }
+            threadLocalStatus.savedSchedulerParams.back().p.allReduceCount = allReduceCount;
             // Only save counts and displs when there is suitable MSCCL algorithm for this
             NCCLCHECK(mscclSaveCountsAndDispls(&threadLocalStatus.savedSchedulerParams.back()));
             break;

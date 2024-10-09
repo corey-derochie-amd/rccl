@@ -37,6 +37,7 @@ struct mscclSchedulerParam {
   bool scheduled;
   mscclAlgoHandle_t handle;
   uint64_t opCount;
+  size_t allReduceCount;
 };
 
 typedef struct {

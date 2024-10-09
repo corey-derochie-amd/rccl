@@ -2184,6 +2184,57 @@ static ncclResult_t taskAppend(struct ncclComm* comm, struct ncclInfo* info) {
   return ncclSuccess;
 }
 
+struct cbData {
+  const char* filename;
+  const void* buff;
+  size_t nBytes;
+  int rank;
+  size_t allReduceCount;
+};
+static void cb(hipStream_t stream, hipError_t status, void* userData) {
+  auto* data = (cbData*)userData;
+  //size_t nBytes = min(1024*1024, data->nBytes);
+  //char hostBuff[1024*1024];
+  //hipMemcpy(hostBuff, data->buff, nBytes, hipMemcpyDeviceToHost);
+  //writeAllReduceBuff(data->filename, hostBuff, nBytes, data->rank, data->allReduceCount);
+  printf("cb : ARC %zi rank %d\n", data->allReduceCount, data->rank);
+  writeAllReduceBuff(data->filename, data->buff, data->nBytes, data->rank, data->allReduceCount);
+  delete data;
+}
+
+void writeAllReduceBuffCallback(hipStream_t stream, const char* filename, const void* buff, size_t nBytes, int rank, size_t allReduceCount) {
+  hipStreamAddCallback(stream, cb, new cbData {
+    filename, buff, nBytes, rank, allReduceCount
+  }, 0);
+}
+
+struct ncclAsyncWriteAllReduceBuffJob {
+  struct ncclAsyncJob base;
+  cudaStream_t stream;
+  cbData data;
+};
+static ncclResult_t writeAllReduceBuffAsync(ncclAsyncJob* job_) {
+  auto* job = (ncclAsyncWriteAllReduceBuffJob*)job_;
+  printf("async : ARC %zi rank %d\n", job->data.allReduceCount, job->data.rank);
+  //hipStreamSynchronize(job->stream);
+  writeAllReduceBuff(job->data.filename, job->data.buff, job->data.nBytes, job->data.rank, job->data.allReduceCount);
+  //writeAllReduceBuffCallback(job->stream, job->data.filename, job->data.buff, job->data.nBytes, job->data.rank, job->data.allReduceCount);
+  return ncclSuccess;
+}
+
+ncclResult_t writeAllReduceBuffAsyncLaunch(ncclComm_t comm, hipStream_t stream, const char* filename, const void* buff, size_t nBytes, int rank, size_t allReduceCount) {
+  ncclAsyncWriteAllReduceBuffJob* job;
+  NCCLCHECK(ncclCalloc(&job, 1));
+  job->stream = stream;
+  job->data.filename = filename;
+  job->data.buff = buff;
+  job->data.nBytes = nBytes;
+  job->data.rank = rank;
+  job->data.allReduceCount = allReduceCount;
+  printf("launch : ARC %zi rank %d\n", allReduceCount, rank);
+  return ncclAsyncLaunch(&job->base, writeAllReduceBuffAsync, nullptr, nullptr, comm);
+}
+
 ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
   NCCLCHECK(ncclGroupStartInternal());
   ncclResult_t ret = ncclSuccess;
@@ -2199,8 +2250,8 @@ ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
   }
   NCCLCHECKGOTO(ArgsCheck(info), ret, fail);
 
-  INFO(NCCL_COLL,"%s: opCount %lx sendbuff %p recvbuff %p count %zi datatype %d op %d root %d comm %p [nranks=%d] stream %p task %d globalrank %d",
-      info->opName, info->comm->opCount, info->sendbuff, info->recvbuff, info->count,
+  INFO(NCCL_COLL,"%s: ARC %zi opCount %lx sendbuff %p recvbuff %p count %zi datatype %d op %d root %d comm %p [nranks=%d] stream %p task %d globalrank %d",
+      info->opName, info->allReduceCount, info->comm->opCount, info->sendbuff, info->recvbuff, info->count,
       info->datatype, info->op, info->root, info->comm, info->comm->nRanks, info->stream,
       info->comm->tasks.nTasksP2p + info->comm->tasks.nTasksColl,
       info->comm->localRankToRank[info->comm->localRank]);
@@ -2208,10 +2259,21 @@ ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
 
   NCCLCHECKGOTO(taskAppend(info->comm, info), ret, fail);
 
+  if (AllReduceDumpDir && info->coll == ncclFuncAllReduce) {
+    NCCLCHECKGOTO(writeAllReduceBuffAsyncLaunch(info->comm, info->stream, "recv.bin", info->recvbuff, info->count * ncclTypeSize(info->datatype), info->comm->rank, info->allReduceCount), ret, fail);
+  }
+
 exit:
   if (devOld != -1) CUDACHECK(cudaSetDevice(devOld));
   ncclGroupErrCheck(ret);
   NCCLCHECK(ncclGroupEndInternal());
+  //if (AllReduceDumpDir && info->coll == ncclFuncAllReduce) {
+  //  //size_t nBytes = min(1024*1024, info->count * ncclTypeSize(info->datatype));
+  //  //char hostBuff[1024*1024];
+  //  //hipMemcpy(hostBuff, info->recvbuff, nBytes, hipMemcpyDeviceToHost);
+  //  //writeAllReduceBuff("recv.bin", hostBuff, nBytes, info->comm->rank, info->allReduceCount);
+  //  writeAllReduceBuffCallback(info->stream, "recv.bin", info->recvbuff, info->count * ncclTypeSize(info->datatype), info->comm->rank, info->allReduceCount);
+  //}
   /* if depth is 1, ncclGroupEndInternal() will trigger group ops. The state can change
    * so we have to check state here. */
   if (info->comm && !info->comm->config.blocking) { NCCLCHECK(ncclCommGetAsyncError(info->comm, &ret)) };

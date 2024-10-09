@@ -39,12 +39,12 @@ NCCL_API(ncclResult_t, mscclRunAlgo,
     const void* sendBuff, const size_t sendCounts[], const size_t sDisPls[],
     void* recvBuff, const size_t recvCounts[], const size_t rDisPls[],
     size_t count, ncclDataType_t dataType, int root, int peer, ncclRedOp_t op,
-    mscclAlgoHandle_t mscclAlgoHandle, ncclComm_t comm, hipStream_t stream);
+    mscclAlgoHandle_t mscclAlgoHandle, ncclComm_t comm, hipStream_t stream, size_t);
 ncclResult_t mscclRunAlgo_impl(
     const void* sendBuff, const size_t sendCounts[], const size_t sDisPls[],
     void* recvBuff, const size_t recvCounts[], const size_t rDisPls[],
     size_t count, ncclDataType_t dataType, int root, int peer, ncclRedOp_t op,
-    mscclAlgoHandle_t mscclAlgoHandle, ncclComm_t comm, hipStream_t stream) {
+    mscclAlgoHandle_t mscclAlgoHandle, ncclComm_t comm, hipStream_t stream, size_t allReduceCount) {
   struct NvtxParamsMsccl {
     size_t sendbytes;
     size_t recvbytes;
@@ -54,7 +54,7 @@ ncclResult_t mscclRunAlgo_impl(
     {0, NVTX_PAYLOAD_ENTRY_TYPE_SIZE, "Message size [bytes] (Send)"},
     {0, NVTX_PAYLOAD_ENTRY_TYPE_SIZE, "Message size [bytes] (Recv)"}
   };
-  NvtxParamsMsccl payload{sendCounts[comm->rank] * ncclTypeSize(dataType), recvCounts[comm->rank] * ncclTypeSize(dataType)};
+  NvtxParamsMsccl payload{sendCounts ? (sendCounts[comm->rank] * ncclTypeSize(dataType)) : 0, recvCounts ? (recvCounts[comm->rank] * ncclTypeSize(dataType)) : 0};
   NVTX3_FUNC_WITH_PARAMS(MSCCL, MscclSchema, payload)
   
   mscclStatus& status = mscclGetStatus(comm->rank);
@@ -80,6 +80,10 @@ ncclResult_t mscclRunAlgo_impl(
   NCCLCHECK(mscclSetupProxy(hostAlgo, comm, stream));
 
   NCCLCHECK(mscclSetupKernel(sendBuff, recvBuff, count, dataType, op, hostAlgo, devAlgo, comm, stream));
+
+  if (AllReduceDumpDir) {
+    writeAllReduceBuffAsyncLaunch(comm, stream, "recv.bin", recvBuff, count * ncclTypeSize(dataType), comm->rank, allReduceCount);
+  }
 
   return ncclSuccess;
 }

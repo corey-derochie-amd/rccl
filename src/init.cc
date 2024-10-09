@@ -166,6 +166,14 @@ static ncclResult_t ncclInit() {
       if (env == NULL || strcmp(env, "1") != 0)
         WARN("Missing \"HSA_FORCE_FINE_GRAIN_PCIE=1\" from environment which can lead to low RCCL performance, system instablity or hang!");
 #endif
+      AllReduceDumpDir = getenv("RCCL_ALLREDUCE_DUMP_DIR");
+      if (AllReduceDumpDir) {
+        INFO(NCCL_INIT, "RCCL_ALLREDUCE_DUMP_DIR=%s", AllReduceDumpDir);
+        if (access(AllReduceDumpDir, F_OK) == -1) {
+          INFO(NCCL_INIT, "mkdir");
+          mkdir(AllReduceDumpDir, 0777);
+        }
+      }
     }
 #ifndef NVTX_NO_IMPL
     initNvtxRegisteredEnums();
