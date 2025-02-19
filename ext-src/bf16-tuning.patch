@@ -1,0 +1,29 @@
+diff --git a/apps/nccl/src/allreduce.hpp b/apps/nccl/src/allreduce.hpp
+index 76674ba..685adbf 100644
+--- a/apps/nccl/src/allreduce.hpp
++++ b/apps/nccl/src/allreduce.hpp
+@@ -847,7 +847,9 @@ cudaError_t allreduce(T* buff, T* scratch, T* resultBuff, mscclpp::DeviceHandle<
+                                                          flag++);
+ #endif
+   } else {
+-    int nBlocks = 5*(nRanksPerNode - 1);
++    int nBlocks = 8 * (nRanksPerNode - 1);
++    if (sizeof(T) * nelems < (1 << 23))
++	nBlocks = 64;
+     int nThreadsPerBlock = 512;
+     if (hieAllred && worldSize >= 8) {
+ 	nBlocks = 20;
+diff --git a/apps/nccl/src/common.hpp b/apps/nccl/src/common.hpp
+index ca2c272..489031b 100644
+--- a/apps/nccl/src/common.hpp
++++ b/apps/nccl/src/common.hpp
+@@ -17,7 +17,8 @@ constexpr int NRANKS1_PER_NODE = 4;
+ constexpr int NRANKS_PER_NODE = 8;
+ constexpr int NPEERS = 7;
+ 
+-constexpr int SCRATCH_SIZE = 2 * 1024 * 1024 * 70;  // double buffer * 35 thread-blocks * 8 ranks * 256KB = 70MB
++//constexpr int SCRATCH_SIZE = 2 * 1024 * 1024 * 70;  // double buffer * 35 thread-blocks * 8 ranks * 256KB = 70MB
++constexpr int SCRATCH_SIZE = 2 * 1024 * 1024 * 128;  // double buffer * 35 thread-blocks * 8 ranks * 256KB = 70MB
+ 
+ __device__ mscclpp::DeviceSyncer deviceSyncer;
+ 
