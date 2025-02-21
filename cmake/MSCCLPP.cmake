@@ -50,8 +50,9 @@ if(ENABLE_MSCCLPP)
     execute_process(
         COMMAND mkdir -p ${MSCCLPP_ROOT}
     )
+    set(MSCCLPP_LIB ${MSCCLPP_ROOT}/lib CACHE PATH "")
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-    find_package(mscclpp_nccl)
+    #find_package(mscclpp_nccl)
 
     #if(NOT mscclpp_nccl_FOUND)
         # Ensure the source code is checked out
@@ -133,19 +134,21 @@ if(ENABLE_MSCCLPP)
             COMMAND git apply --reverse ${CMAKE_CURRENT_SOURCE_DIR}/ext-src/mem-reg.patch
             WORKING_DIRECTORY ${MSCCLPP_SOURCE}
         )
-	execute_process(
-	    COMMAND git apply --reverse ${CMAKE_CURRENT_SOURCE_DIR}/ext-src/bf16-tuning.patch
-	    WORKING_DIRECTORY ${MSCCLPP_SOURCE}
-	)
+        execute_process(
+            COMMAND git apply --reverse ${CMAKE_CURRENT_SOURCE_DIR}/ext-src/bf16-tuning.patch
+            WORKING_DIRECTORY ${MSCCLPP_SOURCE}
+        )
 
     #endif()
 
-    execute_process(COMMAND objcopy
-                    --redefine-syms=${CMAKE_CURRENT_SOURCE_DIR}/src/misc/mscclpp/mscclpp_nccl_syms.txt
-                    "${MSCCLPP_ROOT}/lib/libmscclpp_nccl_static.a"
-                    "${PROJECT_BINARY_DIR}/libmscclpp_nccl.a"
-    )
-    add_library(mscclpp_nccl STATIC IMPORTED)
-    set_target_properties(mscclpp_nccl PROPERTIES IMPORTED_LOCATION ${PROJECT_BINARY_DIR}/libmscclpp_nccl.a)
+    if(NOT USE_MSCCLPP_SHARED)
+        execute_process(COMMAND objcopy
+                        --redefine-syms=${CMAKE_CURRENT_SOURCE_DIR}/src/misc/mscclpp/mscclpp_nccl_syms.txt
+                        "${MSCCLPP_LIB}/libmscclpp_nccl_static.a"
+                        "${PROJECT_BINARY_DIR}/libmscclpp_nccl.a"
+        )
+        add_library(mscclpp_nccl STATIC IMPORTED)
+        set_target_properties(mscclpp_nccl PROPERTIES IMPORTED_LOCATION ${PROJECT_BINARY_DIR}/libmscclpp_nccl.a)
+    endif()
 
 endif()

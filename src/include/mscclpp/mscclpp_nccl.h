@@ -23,32 +23,43 @@ extern std::unordered_map<ncclComm_t, ncclUniqueId> ncclCommToUniqueIdMap;
 
 extern "C" {
   /* See ncclGetUniqueId. */
+  __attribute__ ((visibility("hidden")))
   ncclResult_t  mscclpp_ncclGetUniqueId(mscclppUniqueId* uniqueId);
 
   /* See ncclCommInitRank. */
+  __attribute__ ((visibility("hidden")))
   ncclResult_t  mscclpp_ncclCommInitRank(mscclppComm_t* comm, int nranks, mscclppUniqueId commId, int rank);
 
   /* See ncclCommDestroy. */
+  __attribute__ ((visibility("hidden")))
   ncclResult_t  mscclpp_ncclCommDestroy(mscclppComm_t comm);
 
   /* See ncclAllReduce. */
+  __attribute__ ((visibility("hidden")))
   ncclResult_t  mscclpp_ncclAllReduce(const void* sendbuff, void* recvbuff, size_t count,
       ncclDataType_t datatype, ncclRedOp_t op, mscclppComm_t comm, hipStream_t stream);
 
   /* See ncclAllGather. */
+  __attribute__ ((visibility("hidden")))
   ncclResult_t  mscclpp_ncclAllGather(const void* sendbuff, void* recvbuff, size_t sendcount,
       ncclDataType_t datatype, mscclppComm_t comm, hipStream_t stream);
 
+  __attribute__ ((visibility("hidden")))
   ncclResult_t mscclpp_ncclCommRegister(mscclppComm_t comm, void* buff, size_t size, void** handle);
 
+  __attribute__ ((visibility("hidden")))
   ncclResult_t mscclpp_ncclCommDeregister(mscclppComm_t comm, void* handle);
 
+  __attribute__ ((visibility("hidden")))
   bool mscclpp_BuffIsRegistered(mscclppComm_t comm, const void* buff);
 
+  __attribute__ ((visibility("hidden")))
   size_t mscclpp_BufferSize(mscclppComm_t comm, void* handle);
 
+  __attribute__ ((visibility("hidden")))
   ncclResult_t mscclpp_ncclMemAlloc(void** ptr, size_t size);
 
+  __attribute__ ((visibility("hidden")))
   ncclResult_t mscclpp_ncclMemFree(void* ptr);
 }
 
