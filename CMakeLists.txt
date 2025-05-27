@@ -421,7 +421,6 @@ set(SRC_FILES
   src/init.cc
   src/init_nvtx.cc
   src/mnnvl.cc
-  src/net.cc
   src/msccl.cc
   src/proxy.cc
   src/rccl_wrap.cc
@@ -489,9 +488,6 @@ set(SRC_FILES
   src/include/ipcsocket.h
   src/include/mnnvl.h
   src/include/nccl_common.h
-  src/include/nccl_net.h
-  src/include/nccl_profiler.h
-  src/include/nccl_tuner.h
   src/include/net_device.h
   src/include/net.h
   src/include/nvmlwrap.h
@@ -564,6 +560,25 @@ set(SRC_FILES
   src/include/nvtx3/nvtxDetail/nvtxInitDefs.h
   src/include/nvtx3/nvtxDetail/nvtxLinkOnce.h
   src/include/nvtx3/nvtxDetail/nvtxTypes.h
+  src/include/plugin/nccl_net.h
+  src/include/plugin/nccl_profiler.h
+  src/include/plugin/nccl_tuner.h
+  src/include/plugin/plugin.h
+  src/include/plugin/net/net_v6.h
+  src/include/plugin/net/net_v7.h
+  src/include/plugin/net/net_v8.h
+  src/include/plugin/net/net_v9.h
+  src/include/plugin/net/net_v10.h
+  src/include/plugin/profiler/net_ib.h
+  src/include/plugin/profiler/net_ib_v1.h
+  src/include/plugin/profiler/net_socket.h
+  src/include/plugin/profiler/net_socket_v1.h
+  src/include/plugin/profiler/profiler_v1.h
+  src/include/plugin/profiler/profiler_v2.h
+  src/include/plugin/profiler/profiler_v3.h
+  src/include/plugin/tuner/tuner_v2.h
+  src/include/plugin/tuner/tuner_v3.h
+  src/include/plugin/tuner/tuner_v4.h
   src/misc/alt_rsmi.cc
   src/misc/archinfo.cc
   src/misc/argcheck.cc
@@ -578,7 +593,6 @@ set(SRC_FILES
 # src/misc/nvmlwrap.cc
   src/misc/nvmlwrap_stub.cc
   src/misc/param.cc
-  src/misc/profiler.cc
   src/misc/rocm_smi_wrap.cc
   src/misc/rocmwrap.cc
   src/misc/roctx.cc
@@ -587,12 +601,26 @@ set(SRC_FILES
   src/misc/signals.cc
   src/misc/socket.cc
   src/misc/strongstream.cc
-  src/misc/tuner.cc
   src/misc/utils.cc
   src/misc/msccl/msccl_lifecycle.cc
   src/misc/msccl/msccl_parser.cc
   src/misc/msccl/msccl_setup.cc
   src/misc/msccl/msccl_status.cc
+  src/plugin/net.cc
+  src/plugin/plugin_open.cc
+  src/plugin/profiler.cc
+  src/plugin/tuner.cc
+  src/plugin/net/net_v6.cc
+  src/plugin/net/net_v7.cc
+  src/plugin/net/net_v8.cc
+  src/plugin/net/net_v9.cc
+  src/plugin/net/net_v10.cc
+  src/plugin/profiler/profiler_v1.cc
+  src/plugin/profiler/profiler_v2.cc
+  src/plugin/profiler/profiler_v3.cc
+  src/plugin/tuner/tuner_v2.cc
+  src/plugin/tuner/tuner_v3.cc
+  src/plugin/tuner/tuner_v4.cc
   src/ras/client.cc
   src/ras/client_support.cc
   src/ras/collectives.cc
@@ -610,6 +638,7 @@ set(SRC_FILES
   src/transport/net_socket.cc
   src/transport/nvls.cc
   src/transport/p2p.cc
+  src/transport/profiler.cc
   src/transport/shm.cc
 )
 
@@ -731,6 +760,7 @@ add_dependencies(rccl git_version_check)                                      # 
 target_include_directories(rccl PRIVATE ${PROJECT_BINARY_DIR}/include)        # for generated rccl.h header
 target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/src)                    # for hipfied headers
 target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/src/include)
+target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/src/include/plugin)
 target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/src/device)
 target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/src/device/network/unpack)
 target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/gensrc)

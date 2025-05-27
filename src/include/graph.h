@@ -37,7 +37,13 @@ ncclResult_t ncclTopoComputeCommCPU(struct ncclComm* comm);
 ncclResult_t ncclTopoGetNetDev(struct ncclComm* comm, int rank, struct ncclTopoGraph* graph, int channelId, int peerRank, int64_t* id, int* dev, int* proxyRank);
 ncclResult_t ncclTopoCheckP2p(struct ncclComm* comm, struct ncclTopoSystem* system, int rank1, int rank2, int* p2p, int *read, int* intermediateRank);
 ncclResult_t ncclTopoCheckMNNVL(struct ncclTopoSystem* system, struct ncclPeerInfo* info1, struct ncclPeerInfo* info2, int* ret);
-ncclResult_t ncclTopoCheckGdr(struct ncclTopoSystem* topo, int rank, int64_t netId, int read, int* useGdr);
+enum ncclTopoGdrMode {
+  ncclTopoGdrModeDisable = 0,
+  ncclTopoGdrModeDefault = 1,
+  ncclTopoGdrModePci = 2,
+  ncclTopoGdrModeNum = 3
+};
+ncclResult_t ncclTopoCheckGdr(struct ncclTopoSystem* topo, int rank, int64_t netId, int read, enum ncclTopoGdrMode* gdrMode);
 #define MAX_XGMI_INTER_GPUS 4
 ncclResult_t ncclTopoGetIntraNetDev(struct ncclTopoSystem* system, int rank, struct ncclTopoGraph* graph, int channelId, int type, int64_t* id, int* dev);
 ncclResult_t ncclTopoGetLinkType(struct ncclTopoSystem* system, int cudaDev1, int cudaDev2, bool* isXGMI, int maxInter=MAX_XGMI_INTER_GPUS, int nInter=0, int *inter=nullptr);
@@ -59,11 +65,13 @@ ncclResult_t ncclTopoGetCpuAffinity(struct ncclTopoSystem* system, int rank, cpu
 #define NCCL_TOPO_CPU_VENDOR_AMD 2
 #define NCCL_TOPO_CPU_VENDOR_ZHAOXIN 3
 #define NCCL_TOPO_CPU_VENDOR_MIXED 4
-#define NCCL_TOPO_CPU_TYPE_BDW 1
-#define NCCL_TOPO_CPU_TYPE_SKL 2
-#define NCCL_TOPO_CPU_TYPE_ZEN 3
-#define NCCL_TOPO_CPU_TYPE_ROME 4
-#define NCCL_TOPO_CPU_TYPE_YONGFENG 1
+#define NCCL_TOPO_CPU_MODEL_INTEL_BDW 1
+#define NCCL_TOPO_CPU_MODEL_INTEL_SKL 2
+#define NCCL_TOPO_CPU_MODEL_INTEL_SRP 3
+#define NCCL_TOPO_CPU_MODEL_INTEL_ERP 4
+#define NCCL_TOPO_CPU_MODEL_AMD_ZEN 5
+#define NCCL_TOPO_CPU_MODEL_AMD_ROME 6
+#define NCCL_TOPO_CPU_MODEL_YONGFENG 1
 ncclResult_t ncclTopoCpuType(struct ncclTopoSystem* system, int* arch, int* vendor, int* model);
 ncclResult_t ncclTopoGetGpuCount(struct ncclTopoSystem* system, int* count);
 ncclResult_t ncclTopoGetNetCount(struct ncclTopoSystem* system, int* count);

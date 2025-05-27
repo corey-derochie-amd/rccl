@@ -34,7 +34,8 @@ typedef enum : uint8_t {
   ncclPatternPatUp,
   ncclPatternPatDown,
   ncclPatternSend,
-  ncclPatternRecv
+  ncclPatternRecv,
+  ncclPatternProfiler,
 } ncclPattern_t;
 
 enum ncclProxyOpState { ncclProxyOpNone, ncclProxyOpReady, ncclProxyOpProgress };
@@ -99,6 +100,7 @@ struct ncclProxyOp {
   int peer;
   pid_t pid;
   void* profilerContext;
+  uint64_t workCounter;
 
   struct ncclProxyOp *enqNext;
 };
@@ -135,12 +137,15 @@ struct ncclProxySubArgs {
   // Profiler plugin
   int eActivationMask;
   int rank;
+  uint64_t profilerSteps;
   pid_t pid;
   void* profilerContext;
   void* taskEventHandle;
   void* opEventHandle;
+  void* kernelEventHandle;
   void* stepEventHandles[NCCL_STEPS];
   size_t transSize;
+  uint64_t workCounter;
 
   void* recvRequestsCache[NCCL_STEPS];
   int recvRequestsSubCount;

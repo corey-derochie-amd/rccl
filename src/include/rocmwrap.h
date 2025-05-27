@@ -75,6 +75,17 @@ extern CUmemAllocationHandleType ncclCuMemHandleType;
 
 ncclResult_t rocmLibraryInit(void);
 
+extern int ncclCudaDriverVersionCache;
 extern bool ncclCudaLaunchBlocking; // initialized by ncclCudaLibraryInit()
+
+inline ncclResult_t ncclCudaDriverVersion(int* driver) {
+  int version = __atomic_load_n(&ncclCudaDriverVersionCache, __ATOMIC_RELAXED);
+  if (version == -1) {
+    version = 12030;
+    __atomic_store_n(&ncclCudaDriverVersionCache, version, __ATOMIC_RELAXED);
+  }
+  *driver = version;
+  return ncclSuccess;
+}
 
 #endif
