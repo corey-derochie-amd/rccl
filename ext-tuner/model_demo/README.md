@@ -3,7 +3,7 @@
 This document describes the API structure to be implemented by an external tuner plugin for RCCL. The purpose of this plugin is to enable stakeholders to hand-tailor the selection of an algorithm, a protocol, number of channels (thread blocks) based on an input configuration of interest: message size, number of nodes and GPUs, and link types (PCIe, XGMI, NET).
 
 ## Notes
-- The [example plugin](example/plugin.c) is only a demonstration that uses math models to approximate BW and latency of available choices of algorithms and protocols and provide the one that scores the lowest latency. It is customized for MI300 GPUs and RoCEv2 networks on a limited number of nodes. It is not meant to be inclusive of all AMD GPUs/Network setups out there. 
+- The [model demo plugin](model_demo/plugin.c) is only a demonstration that uses math models to approximate BW and latency of available choices of algorithms and protocols and provide the one that scores the lowest latency. It is customized for MI300 GPUs and RoCEv2 networks on a limited number of nodes. It is not meant to be inclusive of all AMD GPUs/Network setups out there. 
 - The API allows partial outputs: tuners can set only the algorithm and protocol, or let RCCL set the remaining fields (e.g., number of channels).
 - If`getCollInfo()`fails, RCCL will use its default internal mechanisms to determine the best collective configuration.
 - `getCollInfo()`is called for each collective invocation per communicator, so special care is to be taken not to cause excessive latency.
@@ -79,17 +79,17 @@ Terminates the plugin and cleans up any resources allocated by the tuner.
 
 # Build instructions and usage
 
-- The way to use the external plugin is to implement the desired algorithm/protocol selection technique using the API described above. `ext-tuner/example/plugin.c` is an example based on MI300 tuning table by default as a reference for customers in `plugin.c`.
-- Build the `libnccl-tuner.so` file following [the Makefile example](example/Makefile). 
+- The way to use the external plugin is to implement the desired algorithm/protocol selection technique using the API described above. `ext-tuner/model_demo/plugin.c` is an example based on MI300 tuning table by default as a reference for customers in `plugin.c`.
+- Build the `libnccl-tuner.so` file following [the Makefile example](model_demo/Makefile). 
 
 ## Building and using example libnccl-tuner.so
 ```bash
-cd $RCCL_HOME/ext-tuner/example/ 
+cd $RCCL_HOME/ext-tuner/model_demo/ 
 make
 ```
 Next is to let RCCL know that you want to use the custom-made libnccl-tuner.so by setting the following environment variable to the directory of the libnccl-tuner.so file:
 
 ```bash
-export NCCL_TUNER_PLUGIN=$RCCL_HOME/ext-tuner/example/libnccl-tuner.so
+export NCCL_TUNER_PLUGIN=$RCCL_HOME/ext-tuner/model_demo/libnccl-tuner.so
 ```
 
