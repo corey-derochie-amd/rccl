@@ -349,10 +349,6 @@ static struct tuningModel tuning_model_5 {
     {/*LL (min/max/factor/thread_threshold)*/ {0, 98304,  1, 16}, /*LL64/128 (min/max/factor/thread_threshold)*/ {98304, 5046272, 1, 64}},
     /*AllReduce*/
     {/*LL (min/max/factor/thread_threshold)*/ {0, 1048576, 1, 0},/*LL64/128 (min/max/factor/thread_threshold)*/ {1048576, 9437184, 3145728, 0}},
-    /*Reduce*/
-    {/*LL (min/max/factor/thread_threshold)*/ {0, 4096, 1, 0},/*LL64/128 (min/max/factor/thread_threshold)*/ {4096, 16777216, 1, 0}},
-    /*Broadcast*/
-    {/*LL (min/max/factor/thread_threshold)*/ {0, 8192, 1, 0},/*LL64/128 (min/max/factor/thread_threshold)*/ {8192, 33554432, 1, 0}},
   },
 };
 
@@ -748,9 +744,16 @@ ncclResult_t ncclTopoTuneModel(struct ncclComm* comm, int minCompCap, int maxCom
       pEnable = 0;
 #endif
 #else
-      // Enable LL128 by default only on Volta/Ampere/Hopper+NVLink. Other cases are not tested and may cause silent data corruption.
       pEnable = 1;
-      pEnable &= (graphs[a]->typeInter <= PATH_PXB || (minCompCap >= 90 && graphs[a]->typeInter <= (ncclParamLl128C2c() ? PATH_P2C : PATH_PXN)));
+      if (ncclParamLl128C2c() && minCompCap >= 90) {
+        // Enable LL128 by default only on Hopper/Blackwell for all connections up to P2C and PXN.
+        pEnable &= (graphs[a]->typeInter <= PATH_PXN);
+      } else {
+        // Enable LL128 only up to PXB. Don't enable LL128 over PxN because PxN can encapsulate PxB or P2C links.
+        pEnable &= (graphs[a]->typeInter <= PATH_PXB);
+        if (!ncclParamLl128C2c() && minCompCap >= 90)
+          INFO(NCCL_GRAPH, "Disabling LL128 over all PxN connections (PXB and C2C). This ensures that no C2C link will be used by LL128.");
+      }
       pEnable &= (graphs[a]->typeIntra <= PATH_NVB);
       pEnable &= (minCompCap == maxCompCap);
       pEnable &= !(minCompCap < 70 || (minCompCap == 90 && CUDART_VERSION == 11080 && c == ncclFuncAllReduce && a == NCCL_ALGO_RING && comm->nRanks == 2));
