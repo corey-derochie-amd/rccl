@@ -339,6 +339,8 @@ __hidden ncclResult_t pluginGetCollInfo(void* context, ncclFunc_t collType, size
                      collTypeToString(collType), nBytes, numPipeOps, regBuff, ctx->numConfigs);
   }
 
+  float (*table)[NCCL_NUM_PROTOCOLS] = (float (*)[NCCL_NUM_PROTOCOLS])collCostTable;
+
   // Look for matching configuration
   for (int i = 0; i < ctx->numConfigs; i++) {
     TuningConfig* config = &ctx->configs[i];
@@ -367,14 +369,14 @@ __hidden ncclResult_t pluginGetCollInfo(void* context, ncclFunc_t collType, size
 
       // Check bounds
       if (config->algorithm < numAlgo && config->protocol < numProto) {
-        if (collCostTable[config->algorithm][config->protocol] != NCCL_ALGO_PROTO_IGNORE) {
+        if (table[config->algorithm][config->protocol] != NCCL_ALGO_PROTO_IGNORE) {
           if (ctx->logFunction) {
             ctx->logFunction(NCCL_LOG_TRACE, NCCL_TUNING, __FILE__, __LINE__,
                              "TUNER/ExamplePlugin: Setting cost table[%s][%s] (%p) = 0.0 (was %.1f)",
                              algorithmToString(config->algorithm), protocolToString(config->protocol),
-                             &collCostTable[config->algorithm][config->protocol], collCostTable[config->algorithm][config->protocol]);
+                             &table[config->algorithm][config->protocol], table[config->algorithm][config->protocol]);
           }
-          collCostTable[config->algorithm][config->protocol] = 0.0; // Set low cost to prefer this configuration
+          table[config->algorithm][config->protocol] = 0.0; // Set low cost to prefer this configuration
 
           // Only override channels if not set to -1 (keep default)
           if (config->nChannels != -1) {
