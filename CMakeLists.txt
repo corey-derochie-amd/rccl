@@ -1,24 +1,54 @@
 # Copyright (c) 2019-2023 Advanced Micro Devices, Inc. All rights reserved.
 # Modifications Copyright (c) Microsoft Corporation. Licensed under the MIT License.
 
-# CMake version minimum requirements
-#==================================================================================================
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.25) # ipp6 is using 3.28
 
-# CMake Toolchain file to define compilers and path to ROCm
-#==================================================================================================
-if (NOT CMAKE_TOOLCHAIN_FILE)
-  set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/toolchain-linux.cmake")
-  message(STATUS "CMAKE_TOOLCHAIN_FILE: ${CMAKE_TOOLCHAIN_FILE}")
+include(cmake/Dependencies.cmake) # GTest, rocm-cmake, rocm_local_targets
+
+# Version information
+# Read makefiles/version.mk file
+file(READ ${CMAKE_SOURCE_DIR}/makefiles/version.mk VERSION_CONTENT)
+string(REGEX REPLACE ".*NCCL_MAJOR[ ]*:=[ ]*([0-9]+).*" "\\1" NCCL_MAJOR "${VERSION_CONTENT}")
+string(REGEX REPLACE ".*NCCL_MINOR[ ]*:=[ ]*([0-9]+).*" "\\1" NCCL_MINOR "${VERSION_CONTENT}")
+string(REGEX REPLACE ".*NCCL_PATCH[ ]*:=[ ]*([0-9]+).*" "\\1" NCCL_PATCH "${VERSION_CONTENT}")
+string(REGEX REPLACE ".*NCCL_SUFFIX[ ]*:=[ ]*([a-zA-Z0-9]*).*" "\\1" NCCL_SUFFIX "${VERSION_CONTENT}")
+string(REGEX REPLACE ".*PKG_REVISION[ ]*:=[ ]*([0-9]+).*" "\\1" PKG_REVISION "${VERSION_CONTENT}")
+math(EXPR NCCL_VERSION_CODE "(${NCCL_MAJOR} * 10000) + (${NCCL_MINOR} * 100) + ${NCCL_PATCH}")
+
+# Make version information available to C++ source files
+add_compile_definitions(
+    NCCL_USE_CMAKE
+    NCCL_MAJOR=${NCCL_MAJOR}
+    NCCL_MINOR=${NCCL_MINOR}
+    NCCL_PATCH=${NCCL_PATCH}
+    NCCL_VERSION_CODE=${NCCL_VERSION_CODE}
+)
+
+set(ENV{NCCL_USE_CMAKE} "1")
+
+project(RCCL VERSION ${NCCL_MAJOR}.${NCCL_MINOR}.${NCCL_PATCH}
+        LANGUAGES CUDA CXX C)
+
+# Make CMAKE_BUILD_TYPE to release by default if not set
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release")
 endif()
 
-# RCCL project
-#==================================================================================================
-project(rccl CXX)
-
-# Build options
-#==================================================================================================
-option(BUILD_ADDRESS_SANITIZER                 "Enable address sanitizer"                      OFF)
+option(VERBOSE "Enable verbose output" OFF)
+option(KEEP "Keep intermediate files" OFF)
+option(DEBUG "Enable debug build" OFF)
+option(ASAN "Enable Address Sanitizer" OFF)
+option(UBSAN "Enable Undefined Behavior Sanitizer" OFF)
+option(TRACE "Enable tracing" OFF)
+option(WERROR "Treat warnings as errors" OFF)
+option(PROFAPI "Enable profiling API" ON)
+option(ROCTX "Enable ROCTX" ON)
+option(RDMA_CORE "Enable RDMA core" OFF)
+option(NET_PROFILER "Enable network profiler" OFF)
+option(MLX5DV "Enable MLX5DV" OFF)
+option(MAX_EXT_NET_PLUGINS "Maximum external network plugins" 0)
+###################
+#option(BUILD_ADDRESS_SANITIZER                 "Enable address sanitizer"                      OFF)
 option(BUILD_BFD                               "Enable custom backtrace (if bfd.h exists)"     OFF)
 option(BUILD_LOCAL_GPU_TARGET_ONLY             "Build only for GPUs detected on this machine"  OFF)
 option(BUILD_SHARED_LIBS                       "Build as shared library"                       ON)
@@ -36,14 +66,13 @@ option(ENABLE_IFC                              "Enable indirect function call"  
 option(GENERATE_SYM_KERNELS                    "Generate symmetric memory kernels"             OFF)
 option(INSTALL_DEPENDENCIES                    "Force install dependencies"                    OFF)
 option(REPORT_KERNEL_RESOURCE_USE              "Append -Rpass-analysis=kernel to CXX flags"    OFF)
-option(ROCTX                                   "Enable ROCTX"                                  ON)
-option(PROFILE                                 "Enable profiling"                              OFF)
+#option(ROCTX                                   "Enable ROCTX"                                  ON)
+#option(PROFILE                                 "Enable profiling"                              OFF)
 option(TIMETRACE                               "Enable time-trace during compilation"          OFF)
-option(TRACE                                   "Enable additional tracing"                     OFF)
+#option(TRACE                                   "Enable additional tracing"                     OFF)
 option(FAULT_INJECTION                         "Enable fault injection"                        ON)
 
 # Default GPU architectures to build
-#==================================================================================================
 set(DEFAULT_GPUS
       gfx906
       gfx908
@@ -56,59 +85,196 @@ set(DEFAULT_GPUS
       gfx1102
       gfx1200
       gfx1201)
-
-# Load CMake modules
-#==================================================================================================
-include(CheckIncludeFiles)
-include(CheckSymbolExists)
-include(cmake/Dependencies.cmake) # GTest, rocm-cmake, rocm_local_targets
-include(cmake/CheckSymbolExistsNoWarn.cmake)
-
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-# Build only for local GPU architecture
 if (BUILD_LOCAL_GPU_TARGET_ONLY)
-  message(STATUS "Building only for local GPU target")
-  if (COMMAND rocm_local_targets)
-    rocm_local_targets(DEFAULT_GPUS)
-  else()
-    message(WARNING "Unable to determine local GPU targets. Falling back to default GPUs.")
-  endif()
-endif()
-
-# Determine which GPU architectures to build for
-set(GPU_TARGETS "${DEFAULT_GPUS}" CACHE STRING "Target default GPUs if GPU_TARGETS is not defined.")
-
-# Modify GPU architectures for Address Sanitizer builds by appending "xnack+"
-if (BUILD_ADDRESS_SANITIZER)
-  SET(amdgpu_targets "")
-  foreach(amdgpu_target IN LISTS GPU_TARGETS)
-    if(NOT amdgpu_target STREQUAL "")
-      string(FIND "${amdgpu_target}" ":xnack+" HAS_XNACK_SUFFIX)
-      if(HAS_XNACK_SUFFIX EQUAL -1)
-        list(APPEND amdgpu_targets "${amdgpu_target}:xnack+")
-      else()
-        list(APPEND amdgpu_targets "${amdgpu_target}")
-      endif()
+    message(STATUS "Building only for local GPU target")
+    if (COMMAND rocm_local_targets)
+      rocm_local_targets(DEFAULT_GPUS)
+    else()
+      message(WARNING "Unable to determine local GPU targets. Falling back to default GPUs.")
     endif()
-  endforeach()
-  SET(GPU_TARGETS "${amdgpu_targets}")
 endif()
 
-# Check if clang compiler can offload to GPU_TARGETS
-if (COMMAND rocm_check_target_ids)
-  message(STATUS "Checking for ROCm support for GPU targets: " "${GPU_TARGETS}")
-  rocm_check_target_ids(SUPPORTED_GPUS TARGETS ${GPU_TARGETS})
-else()
-  message(WARNING "Unable to check for supported GPU targets. Falling back to default GPUs.")
-  set(SUPPORTED_GPUS ${DEFAULT_GPUS})
+#find_package(CUDAToolkit REQUIRED)
+if (NOT CMAKE_TOOLCHAIN_FILE)
+  set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/toolchain-linux.cmake")
+  message(STATUS "CMAKE_TOOLCHAIN_FILE: ${CMAKE_TOOLCHAIN_FILE}")
 endif()
 
-set(GPU_TARGETS "${SUPPORTED_GPUS}")
-message(STATUS "Compiling for ${GPU_TARGETS}")
+## CUDA version detection
+#string(REGEX MATCH "([0-9]+\\.[0-9]+)" CUDA_VERSION "${CUDAToolkit_VERSION}")
+#
+## Extract major and minor version numbers
+#string(REGEX MATCH "([0-9]+)" CUDA_MAJOR "${CUDA_VERSION}")
+#string(REGEX MATCH "([0-9]+)$" CUDA_MINOR "${CUDA_VERSION}")
+#string(REGEX REPLACE ".*\\.([0-9]+)$" "\\1" CUDA_MINOR "${CUDA_VERSION}")
+#
+## Add CUDA version definitions after find_package
+#add_compile_definitions(
+#    CUDA_MAJOR=${CUDA_MAJOR}
+#    CUDA_MINOR=${CUDA_MINOR}
+#)
+
+# CUDA architecture flags
+if(NOT DEFINED GPU_TARGETS OR GPU_TARGETS STREQUAL "")
+#    message(STATUS "CMAKE_CUDA_ARCHITECTURES not defined or empty, setting default values based on CUDA version")
+#
+#    if(${CUDA_MAJOR} LESS 9)
+#        set(CMAKE_CUDA_ARCHITECTURES "35;50;60;61")
+#    elseif(${CUDA_MAJOR} EQUAL 9)
+#        set(CMAKE_CUDA_ARCHITECTURES "35;50;60;61;70")
+#    elseif(${CUDA_MAJOR} EQUAL 10)
+#        set(CMAKE_CUDA_ARCHITECTURES "35;50;60;61;70")
+#    elseif(${CUDA_MAJOR} EQUAL 11)
+#        if(${CUDA_MINOR} LESS 8)
+#            set(CMAKE_CUDA_ARCHITECTURES "35;50;60;61;70;80")
+#        else()
+#            set(CMAKE_CUDA_ARCHITECTURES "35;50;60;61;70;80;90")
+#        endif()
+#    elseif(${CUDA_MAJOR} EQUAL 12)
+#        if(${CUDA_MINOR} LESS 8)
+#            set(CMAKE_CUDA_ARCHITECTURES "50;60;61;70;80;90")
+#        else()
+#            set(CMAKE_CUDA_ARCHITECTURES "50;60;61;70;80;90;100;120")
+#        endif()
+#    elseif(${CUDA_MAJOR} EQUAL 13)
+#        set(CMAKE_CUDA_ARCHITECTURES "50;60;61;70;80;90;100;110;120")
+#    else()
+#        # For future CUDA versions, include all architectures up to the latest known
+#        set(CMAKE_CUDA_ARCHITECTURES "50;60;61;70;80;90;100;110;120")
+#    endif()
+    if(DEFINED CMAKE_HIP_ARCHITECTURES AND NOT CMAKE_HIP_ARCHITECTURES STREQUAL "")
+      set(GPU_TARGETS "${CMAKE_HIP_ARCHITECTURES}")
+    else()
+      set(GPU_TARGETS "${DEFAULT_GPUS}")
+    endif()
+
+    # Check if clang compiler can offload to GPU_TARGETS
+    if (COMMAND rocm_check_target_ids)
+      message(STATUS "Checking for ROCm support for GPU targets: " "${GPU_TARGETS}")
+      rocm_check_target_ids(SUPPORTED_GPUS TARGETS ${GPU_TARGETS})
+    else()
+      message(WARNING "Unable to check for supported GPU targets. Falling back to default GPUs.")
+      set(SUPPORTED_GPUS ${GPU_TARGETS})
+    endif()
+
+    set(GPU_TARGETS "${SUPPORTED_GPUS}")
+endif()
+message(STATUS "Using GPU_TARGETS: ${GPU_TARGETS}")
 
 ## NOTE: Reload rocm-cmake in order to update GPU_TARGETS
 include(cmake/Dependencies.cmake) # Reloading to use desired GPU_TARGETS instead of defaults
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -fvisibility=hidden -Wall -Wno-unused-function -Wno-sign-compare -Wvla -g")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-extended-lambda -Xptxas -maxrregcount=96 -Xfatbin -compress-all -fPIC")
+
+# Sanitizer options
+if(ASAN)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address -static-libasan")
+
+    # Modify GPU architectures for Address Sanitizer builds by appending "xnack+"
+    SET(amdgpu_targets "")
+    foreach(amdgpu_target IN LISTS GPU_TARGETS)
+      if(NOT amdgpu_target STREQUAL "")
+        string(FIND "${amdgpu_target}" ":xnack+" HAS_XNACK_SUFFIX)
+        if(HAS_XNACK_SUFFIX EQUAL -1)
+          list(APPEND amdgpu_targets "${amdgpu_target}:xnack+")
+        else()
+          list(APPEND amdgpu_targets "${amdgpu_target}")
+        endif()
+      endif()
+    endforeach()
+    SET(GPU_TARGETS "${amdgpu_targets}")
+endif()
+
+if(UBSAN)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=undefined -static-libubsan")
+endif()
+
+# Additional options
+if(TRACE)
+    add_definitions(-DENABLE_TRACE)
+endif()
+
+if(NOT ROCTX)
+    add_definitions(-DROCTX_DISABLE)
+else()
+    find_library(ROCTX_LIB NAMES roctx64)
+    find_path(ROCTRACER_INCLUDE_DIR "roctracer/roctx.h")
+    if(ROCTX_LIB AND ROCTRACER_INCLUDE_DIR)
+      set(ROCTX_ENABLE ON)
+      message(STATUS "ROCTX include directory found: ${ROCTRACER_INCLUDE_DIR}")
+      message(STATUS "ROCTX library found: ${ROCTX_LIB}")
+    else()
+      message(WARNING "ROCTX library not found. Skipping ROCTX linking.")
+    endif()
+endif()
+
+if(WERROR)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
+endif()
+
+if(PROFAPI)
+    add_definitions(-DPROFAPI)
+endif()
+
+set(EXTRA_LIBS)
+
+# RDMA and MLX5DV are Linux-specific features
+if(RDMA_CORE)
+    add_definitions(-DNCCL_BUILD_RDMA_CORE=1)
+    find_library(VERBS_LIBRARY NAMES verbs)
+    if(VERBS_LIBRARY)
+        list(APPEND EXTRA_LIBS ${VERBS_LIBRARY})
+    endif()
+endif()
+
+if(MLX5DV)
+    add_definitions(-DNCCL_BUILD_MLX5DV=1)
+    find_library(MLX5_LIBRARY NAMES mlx5)
+    if(MLX5_LIBRARY)
+        list(APPEND EXTRA_LIBS ${MLX5_LIBRARY})
+    endif()
+endif()
+
+if(NET_PROFILER)
+    add_definitions(-DNCCL_ENABLE_NET_PROFILING=1)
+endif()
+
+if(MAX_EXT_NET_PLUGINS GREATER 0)
+    add_definitions(-DNCCL_NET_MAX_PLUGINS=${MAX_EXT_NET_PLUGINS})
+endif()
+
+# Library dependencies
+find_library(RT_LIBRARY NAMES rt)
+if(RT_LIBRARY)
+    list(APPEND EXTRA_LIBS ${RT_LIBRARY})
+endif()
+
+# Debug/Release specific flags
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -O0")
+set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS} -O0 -G -g")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3")
+set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS} -O3")
+
+# Directories
+set(HIPIFY_DIR "${CMAKE_CURRENT_BINARY_DIR}/hipify")
+
+# Load CMake modules
+include(CheckIncludeFiles)
+include(CheckSymbolExists)
+include(cmake/CheckSymbolExistsNoWarn.cmake)
+include(cmake/hipify_files.cmake)
+
+add_subdirectory(ext-net)
+add_subdirectory(ext-profiler/example)
+add_subdirectory(ext-tuner/example)
+add_subdirectory(src)
+
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 
 # Try to establish ROCM_PATH (for find_package)
 #==================================================================================================
@@ -370,19 +536,6 @@ execute_process(
 if (ENABLE_MSCCLPP AND NOT(${HOST_OS_ID} STREQUAL "ubuntu" OR ${HOST_OS_ID} STREQUAL "centos"))
   set(ENABLE_MSCCLPP OFF)
   message(WARNING "MSCCL++ integration not supported on this OS (${HOST_OS_ID}); disabling MSCCL++ build")
-endif()
-
-# Check for ROCTX
-if(ROCTX)
-  find_library(ROCTX_LIB NAMES roctx64)
-  find_path(ROCTRACER_INCLUDE_DIR "roctracer/roctx.h")
-  if(ROCTX_LIB AND ROCTRACER_INCLUDE_DIR)
-    set(ROCTX_ENABLE ON)
-    message(STATUS "ROCTX include directory found: ${ROCTRACER_INCLUDE_DIR}")
-    message(STATUS "ROCTX library found: ${ROCTX_LIB}")
-  else()
-    message(WARNING "ROCTX library not found. Skipping ROCTX linking.")
-  endif()
 endif()
 
 # Determine version from makefiles/version.mk and fill in templates
@@ -710,55 +863,6 @@ if (ENABLE_MSCCLPP)
   list(APPEND SRC_FILES ${MSCCLPP_SOURCES})
 endif()
 
-# Hipify source files (copy of source generated into hipify directory)
-#==================================================================================================
-find_program(hipify-perl_executable hipify-perl)
-if(NOT hipify-perl_executable)
-  message(FATAL_ERROR "hipify-perl not found")
-endif()
-set(HIPIFY_DIR "${CMAKE_CURRENT_BINARY_DIR}/hipify")
-
-## Loop over each source file to hipify
-foreach(SRC_FILE ${SRC_FILES})
-  # Check that file exists
-  if (NOT EXISTS ${CMAKE_SOURCE_DIR}/${SRC_FILE})
-    message(FATAL_ERROR "Unable to find file listed in CMakeLists.txt: ${CMAKE_SOURCE_DIR}/${SRC_FILE}")
-  endif()
-
-  # Establish hipified copy of the source file
-  set(HIP_FILE "${HIPIFY_DIR}/${SRC_FILE}")
-  get_filename_component(HIP_FILE_DIR ${HIP_FILE} DIRECTORY)
-
-  # Make sure the file name is unique and there is no duplicate
-  add_file_unique(HIP_SOURCES ${HIP_FILE})
-
-  # Convert .cu files to .cpp so that they get processed properly
-  string(REPLACE "\.cuh" "\.h" HIP_FILE ${HIP_FILE})
-  string(REPLACE "\.cu" "\.cu.cpp" HIP_FILE ${HIP_FILE})
-  list(APPEND HIP_SOURCES ${HIP_FILE})
-
-  # Create a custom command to create hipified source code
-  if (FAULT_INJECTION)
-    add_custom_command(
-      OUTPUT ${HIP_FILE}
-      COMMAND mkdir -p ${HIP_FILE_DIR}
-              && ${hipify-perl_executable} -quiet-warnings ${CMAKE_SOURCE_DIR}/${SRC_FILE} -o ${HIP_FILE}
-              && ${CMAKE_COMMAND} -E env bash ${CMAKE_CURRENT_SOURCE_DIR}/cmake/scripts/add_unroll.sh ${HIP_FILE}
-              && ${CMAKE_COMMAND} -E env bash ${CMAKE_CURRENT_SOURCE_DIR}/cmake/scripts/add_faults.sh ${HIP_FILE}
-      MAIN_DEPENDENCY ${SRC_FILE}
-      COMMENT "Hipifying ${SRC_FILE} -> ${HIP_FILE}"
-    )
-  else()
-    add_custom_command(
-      OUTPUT ${HIP_FILE}
-      COMMAND mkdir -p ${HIP_FILE_DIR}
-              && ${hipify-perl_executable} -quiet-warnings ${CMAKE_SOURCE_DIR}/${SRC_FILE} -o ${HIP_FILE}
-              && ${CMAKE_COMMAND} -E env bash ${CMAKE_CURRENT_SOURCE_DIR}/cmake/scripts/add_unroll.sh ${HIP_FILE}
-      MAIN_DEPENDENCY ${SRC_FILE}
-      COMMENT "Hipifying ${SRC_FILE} -> ${HIP_FILE}"
-    )
-  endif()
-endforeach()
 
 # Adding custom target to hipify all the source files
 # This is required to make sure that all the hipified source files are
@@ -922,24 +1026,6 @@ if (BUILD_TESTS AND ROCM_VERSION VERSION_GREATER_EQUAL "60400" AND CMAKE_BUILD_T
   add_dependencies(rccl replace_static_in_hipify)
 endif()
 
-## Set RCCL include directories
-target_include_directories(rccl PRIVATE ${PROJECT_BINARY_DIR}/include)        # for generated rccl.h header
-target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/src)                    # for hipfied headers
-target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/src/device)
-target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/src/device/network/unpack)
-target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/src/include)
-target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/src/include/mlx5)
-target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/src/include/plugin)
-target_include_directories(rccl PRIVATE ${HIPIFY_DIR}/gensrc)
-target_include_directories(rccl PRIVATE ${HSA_INCLUDE_PATH})
-target_include_directories(rccl PRIVATE ${ROCM_SMI_INCLUDE_DIR})
-target_include_directories(rccl PRIVATE ${ROCMCORE_PATH}/include)
-if(DEMANGLE_DIR)
-  target_include_directories(rccl PRIVATE ${DEMANGLE_DIR})
-endif()
-if(ROCTX_ENABLE)
-  target_include_directories(rccl PRIVATE ${ROCTRACER_INCLUDE_DIR})
-endif()
 
 ## Set RCCL compile definitions
 if(COLLTRACE)

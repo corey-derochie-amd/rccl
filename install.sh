@@ -342,7 +342,7 @@ cmake_common_options="${cmake_common_options} -DCMAKE_EXE_LINKER_FLAGS=\"-Wl,-rp
 # Initiate RCCL CMake
 # Passing ONLY_FUNCS separately (not as part of ${cmake_common_options}) as
 # ${ONLY_FUNCS} is a debug-only feature
-${cmake_executable} ${cmake_common_options} -DONLY_FUNCS="${ONLY_FUNCS}" ../../.
+echo ${cmake_executable} ${cmake_common_options} -DONLY_FUNCS="${ONLY_FUNCS}" ../../.
 check_exit_code "$?"
 
 # Enable verbose output from Makefile
